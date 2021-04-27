@@ -1,7 +1,8 @@
 class SocketWrapper(object):
     """包装客户端套接字类"""
 
-    def __init__(self,sock):
+    def __init__(self, sock):
+
         self.sock = sock
 
     def recv_data(self):

@@ -1,6 +1,7 @@
 from pymysql import connect
 from config import *
 
+
 class DB(object):
 
     def __init__(self):
@@ -8,15 +9,15 @@ class DB(object):
 
         # 创建数据库连接
         self.conn = connect(host=DB_HOST,
-                            user = DB_USER,
-                            password = DB_PASS,
+                            user=DB_USER,
+                            password=DB_PASS,
                             database=DB_NAME,
-                            port = DB_PORT)
+                            port=DB_PORT)
         # 获得游标
         self.cursor = self.conn.cursor()
         self.commit = self.conn.commit
 
-    def get_one(self,sql):
+    def get_one(self, sql):
         """执行SQL查询"""
 
         # 执行SQL查询
@@ -31,7 +32,7 @@ class DB(object):
 
         # 保存返回结果
         return_data = dict()
-        for field,value in zip(fields,query_result):
+        for field, value in zip(fields, query_result):
             return_data[field] = value
 
         return return_data
@@ -41,4 +42,3 @@ class DB(object):
 
         self.cursor.close()
         self.conn.close()
-

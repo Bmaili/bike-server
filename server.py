@@ -3,6 +3,7 @@ from server_socket import ServerSocket
 from socket_wrapper import SocketWrapper
 from db import DB
 from config import *
+import re
 
 
 class Server(object):
@@ -12,22 +13,63 @@ class Server(object):
 
         # 初始化套接字
         self.server_socket = ServerSocket()
+
         # 保存客户端连接套接字
         self.clients = dict()
+
         # 请求处理函数
         self.request_handle_functions = dict()
-        # 注册请求处理函数
 
+        # 注册请求处理函数
         self.register(USER_REQUEST_FLUSH, lambda sf, uID, data: self.request_Flush_handle(sf, uID, data))
         self.register(USER_REQUEST_THEBIKE, lambda sf, uID, data: self.request_TheBike_handle(sf, uID, data))
         self.register(USER_REQUEST_THEFRIEND, lambda sf, uID, data: self.request_TheFriend_handle(sf, uID, data))
         self.register(USER_REQUEST_ADDFRIEND, lambda sf, uID, data: self.request_addFriend_handle(sf, uID, data))
         self.register(USER_REQUEST_SHAREBIKE, lambda sf, uID, data: self.request_shareBike_handle(sf, uID, data))
+        self.register(USER_REQUEST_DELETEFRIEND, lambda sf, uID, data: self.request_deleteFriend_handle(sf, uID, data))
+        self.register(USER_REQUEST_SHAREBACK, lambda sf, uID, data: self.request_shareBack_handle(sf, uID, data))
+        self.register(USER_REQUEST_REPLYFRIEND, lambda sf, uID, data: self.request_replyFriend_handle(sf, uID, data))
         self.register(USER_REQUEST_OPEN, lambda sf, uID, data: self.request_openBike_handle(sf, uID, data))
 
     def register(self, request_id, handle_function):
         """注册请求处理函数"""
+
         self.request_handle_functions[request_id] = handle_function
+
+    @staticmethod
+    def parse_request_text(request_text):
+        """解析请求数据"""
+
+        request_text_list = request_text.split(DELIMITER)
+        print(request_text_list)
+        # 保存请求数据
+        request_data = dict()
+
+        request_data['request_id'] = request_text_list[0]
+        if request_text_list[0] == USER_REQUEST_FLUSH:  # 刷新请求
+            pass
+        elif request_text_list[0] == USER_REQUEST_THEBIKE:  # 具体某辆车
+            request_data['bike_ID'] = request_text_list[1]
+        elif request_text_list[0] == USER_REQUEST_THEFRIEND:  # 具体某个好友
+            request_data['friend_ID'] = request_text_list[1]
+        elif request_text_list[0] == USER_REQUEST_ADDFRIEND:  # 请求添加好友
+            request_data['friend_ID'] = request_text_list[1]
+        elif request_text_list[0] == USER_REQUEST_SHAREBIKE:  # 分享车辆使用权
+            request_data['bike_ID'] = request_text_list[1]
+            request_data['friend_ID'] = request_text_list[2]
+        elif request_text_list[0] == USER_REQUEST_DELETEFRIEND:  # 删除好友
+            request_data['friend_ID'] = request_text_list[1]
+        elif request_text_list[0] == USER_REQUEST_SHAREBACK:  # 撤销好友车辆使用权
+            request_data['bike_ID'] = request_text_list[1]
+            request_data['friend_ID'] = request_text_list[2]
+        elif request_text_list[0] == USER_REQUEST_REPLYFRIEND:  # 对他人好友请求的回应
+            request_data['friend_ID'] = request_text_list[1]
+            request_data['reply_num'] = request_text_list[2]
+        elif request_text_list[0] == USER_REQUEST_OPEN:  # 开锁请求
+            request_data['bike_ID'] = request_text_list[1]
+
+        print("解析数据函数执行完毕！")
+        return request_data
 
     def startup(self):
         """启动服务器"""
@@ -46,61 +88,6 @@ class Server(object):
             else:
                 client_sock.close()
 
-    def mylogin(self, client_sock, request_text):
-        # 解析请求数据
-        request_data = request_text.split(DELIMITER)
-        if request_data[0] != USER_REQUEST_LOGIN or not request_data[1] or not request_data[2]:
-            return False
-        user_ID = request_data[1]
-        user_password = request_data[2]
-        print(user_password)
-        """用户名和密码验证"""
-        # 查询SQL
-        sql = "select * from tb_user where user_ID='" + user_ID + "'"
-        # 创建数据库连接对象
-        db_conn = DB()
-        results = db_conn.get_one(sql)
-        # 未查询到数据
-        if not results:
-            client_sock.send_data(DELIMITER.join([USER_RESULT_OPEN, '3']))
-            print("没这个用户")
-            return False
-        # 用户名和密码不相等
-        if results['user_password'] != user_password:
-            client_sock.send_data(DELIMITER.join([USER_RESULT_OPEN, '2']))
-            print("密码不对")
-            return False
-        client_sock.send_data(DELIMITER.join([USER_RESULT_OPEN, '1']))
-        print(user_ID + '登陆成功')
-        return user_ID
-
-    @staticmethod
-    def parse_request_text(request_text):
-        """解析请求数据"""
-
-        request_text_list = request_text.split(DELIMITER)
-        print(request_text_list)
-        # 保存请求数据
-        request_data = dict()
-
-        request_data['request_id'] = request_text_list[0]
-        if request_text_list[0] == USER_REQUEST_FLUSH:  # 刷新请求
-            pass
-        elif request_text_list[0] == USER_REQUEST_THEBIKE:  # 具体某辆车
-            request_data['bike_ID'] = request_text_list[1]
-        elif request_text_list[0] == USER_REQUEST_THEFRIEND:  # 具体某个好友
-            request_data['friend_ID'] = request_text_list[1]
-        elif request_text_list[0] == USER_REQUEST_ADDFRIEND:  # 添加好友
-            request_data['friend_ID'] = request_text_list[1]
-        elif request_text_list[0] == USER_REQUEST_SHAREBIKE:  # 分享车辆使用权
-            request_data['bike_ID'] = request_text_list[1]
-            request_data['friend_ID'] = request_text_list[2]
-        elif request_text_list[0] == USER_REQUEST_OPEN:  # 开锁请求
-            request_data['bike_ID'] = request_text_list[1]
-
-        print("a号标记点")
-        return request_data
-
     def request_handle(self, client_sock, user_ID):
         """响应处理函数"""
 
@@ -117,55 +104,104 @@ class Server(object):
             handle_function = self.request_handle_functions[request_data["request_id"]]
             if handle_function:
                 handle_function(client_sock, user_ID, request_data)
-
         client_sock.close()
+
+    def mylogin(self, client_sock, request_text):
+        # 解析请求数据
+
+        request_data = request_text.split(DELIMITER)
+        if request_data[0] != USER_REQUEST_LOGIN or not request_data[1] or not request_data[2]:
+            return False
+        user_ID = request_data[1]
+        user_password = request_data[2]
+        print(user_password)
+
+        """用户名和密码验证"""
+        sql = "select * from tb_user where user_ID='" + user_ID + "'"
+        db_conn = DB()
+        results = db_conn.get_one(sql)
+
+        if not results:
+            client_sock.send_data(DELIMITER.join([USER_RESULT_LOGIN, '3']))
+            print("没这个用户")
+            return False
+
+        if results['user_password'] != user_password:
+            client_sock.send_data(DELIMITER.join([USER_RESULT_LOGIN, '2']))
+            print("密码不对")
+            return False
+
+        client_sock.send_data(DELIMITER.join([USER_RESULT_LOGIN, '1']))
+        print(user_ID + '登陆成功')
+        return user_ID
 
     def request_Flush_handle(self, client_sock, user_ID, request_data):
         '''处理刷新请求'''
+
         # 查询SQL
         sql = "select * from tb_user where user_ID='" + user_ID + "'"
         # 创建数据库连接对象
         db_conn = DB()
         results = db_conn.get_one(sql)
         user_nickname = results['user_nickname']
+        pass
 
     def request_TheBike_handle(self, client_sock, user_ID, request_data):
         '''查看某辆车的具体信息'''
+
         bike_ID = request_data['bike_ID']
-        # 查询SQL
-        sql = "select * from tb_bike where bike_ID='" + bike_ID + "'"
-        # 创建数据库连接对象
+        sql_bike = "select * from tb_bike where bike_ID='" + bike_ID + "'"
         db_conn = DB()
-        results = db_conn.get_one(sql)
-        if not results:
+        results_bike = db_conn.get_one(sql_bike)
+
+        if not results_bike:
+            client_sock.send_data(DELIMITER.join([USER_RESULT_THEBIKE, '2']))
+            print("这车不存在")
             return
 
-        print(results)
-        client_sock.send_data(DELIMITER.join([results['bike_ID'],
-                                              results['bike_nickname'],
-                                              results['bike_status'],
-                                              results['bike_host'],
-                                              results['bike_users'],
-                                              results['bike_gps'],
-                                              results['bike_power']]))
+        if results_bike['bike_host'] != user_ID or len(
+                re.findall(user_ID + DELIMITER_2, results_bike['bike_users'], re.S)) == 0:
+            uesr_number = len(re.findall(DELIMITER_2, results_bike['bike_users'], re.S)) - 1
+            client_sock.send_data(DELIMITER.join([USER_RESULT_THEBIKE, '3',
+                                                  results_bike['bike_ID'],
+                                                  results_bike['bike_nickname'],
+                                                  results_bike['bike_host'],
+                                                  uesr_number]))
+            print("你只能看部分数据！")
+            return
+
+        client_sock.send_data(DELIMITER.join([USER_RESULT_THEBIKE, '1',
+                                              results_bike['bike_ID'],
+                                              results_bike['bike_nickname'],
+                                              results_bike['bike_status'],
+                                              results_bike['bike_host'],
+                                              results_bike['bike_users'],
+                                              results_bike['bike_gps'],
+                                              results_bike['bike_power']]))
+        print("查看某辆车具体信息函数执行完毕" + results_bike)
 
     def request_TheFriend_handle(self, client_sock, user_ID, request_data):
-        '''查看某个好友的具体信息'''
+        '''查看某个人的具体信息'''
+
         friend_ID = request_data['friend_ID']
-        # 查询SQL
         sql = "select * from tb_user where user_ID='" + friend_ID + "'"
-        # 创建数据库连接对象
         db_conn = DB()
         results = db_conn.get_one(sql)
         if not results:
+            client_sock.send_data(DELIMITER.join([USER_RESULT_THEFRIEND, '2']))
+            print("此人不存在")
             return
-        print(results)
-        client_sock.send_data(DELIMITER.join([results['user_ID'],
+
+        client_sock.send_data(DELIMITER.join([USER_RESULT_THEFRIEND, '1',
+                                              results['user_ID'],
                                               results['user_nickname'],
-                                              results['user_status']]))
+                                              results['user_status'],
+                                              results['user_ownership']]))
+        print('查看某个人的具体信息函数执行完毕')
 
     def request_addFriend_handle(self, client_sock, user_ID, request_data):
         '''添加好友'''
+
         makefriend_ID = request_data['friend_ID']
         if user_ID == makefriend_ID:
             client_sock.send_data(DELIMITER.join(USER_RESULT_ADDFRIEND, '4'))
@@ -180,61 +216,157 @@ class Server(object):
             print("不存在这个用户")
             return
 
-        sql_2 = "select * from tb_user where user_ID='" + user_ID + "'"
-        results_2 = db_conn.get_one(sql_2)
-        user_friends = []
-        if results_2['user_friend']:
-            user_friends = results_2['user_friend'].split(DELIMITER_2)
+        sql = "select * from tb_user where user_ID='" + user_ID + "'"
+        results = db_conn.get_one(sql)
 
-        if makefriend_ID in user_friends:  # 这个用户已经是你的好友了
+        if len(re.findall(makefriend_ID + DELIMITER_2, results['user_friend'], re.S)) != 0:
             client_sock.send_data(DELIMITER.join([USER_RESULT_ADDFRIEND, '2']))
             print("这个用户已经是你的好友了")
             return
 
-        else:  # 请求发送成功
-            sql_3 = "select * from tb_user where user_ID='" + makefriend_ID + "'"
-            results_3 = db_conn.get_one(sql_3)
-            results_3['user_message'] += DELIMITER_2 + USER_MESSAGE_ADDFRIEND + DELIMITER_3 + user_ID
-            sql_2 = "update tb_user set user_message = '" + results_3[
-                'user_message'].strip(DELIMITER_2) + "' where user_ID = '" + makefriend_ID + "'"
-            db_conn.cursor.execute(sql_2)
-            db_conn.commit()  # 提交数据
-            client_sock.send_data(DELIMITER.join([USER_RESULT_ADDFRIEND, '1']))
+        # 请求发送成功
+        sql = "select * from tb_user where user_ID='" + makefriend_ID + "'"
+        results = db_conn.get_one(sql)
+        results['user_message'] += USER_MESSAGE_ADDFRIEND + DELIMITER_3 + user_ID + DELIMITER_2
+        sql_2 = "update tb_user set user_message = '" + results[
+            'user_message'] + "' where user_ID = '" + makefriend_ID + "'"
+        db_conn.cursor.execute(sql_2)
+        db_conn.commit()  # 提交数据
+        client_sock.send_data(DELIMITER.join([USER_RESULT_ADDFRIEND, '1']))
         print("请求添加好友函数执行完毕")
 
     def request_shareBike_handle(self, client_sock, user_ID, request_data):
         '''分享自行车骑行权限'''
+
         bike_ID = request_data['bike_ID']
         friend_ID = request_data['friend_ID']
         db_conn = DB()
-        sql = "select * from tb_user where user_ID='" + user_ID + "'"
-        results = db_conn.get_one(sql)
-        user_friend = results['user_friend'].split(DELIMITER)
-        if friend_ID not in user_friend:
-            print('这个人不是你的好友哦！')
-            client_sock.send_data(DELIMITER.join([USER_REQUEST_SHAREBIKE, '3']))
+        sql_friend = "select * from tb_user where user_ID='" + friend_ID + "'"
+        results_friend = db_conn.get_one(sql_friend)
+        sql_bike = "select * from tb_bike where bike_ID='" + bike_ID + "'"
+        results_bike = db_conn.get_one(sql_bike)
+
+        if user_ID == friend_ID:
+            client_sock.send_data(DELIMITER.join([USER_RESULT_SHAREBIKE, '6']))
+            print("不必把自己的车的使用权赋予自己！")
             return
 
-        sql = "select * from tb_user where user_ID='" + friend_ID + "'"
-        results = db_conn.get_one(sql)
-        friend_apply = results['user_apply'].split(DELIMITER)
-        if bike_ID in friend_apply:
-            print('人家已经有这辆车了！')
-            client_sock.send_data(DELIMITER.join([USER_REQUEST_SHAREBIKE, '2']))
+        if results_bike['bike_host'] != user_ID:
+            client_sock.send_data(DELIMITER.join([USER_RESULT_SHAREBIKE, '5']))
+            print("这辆车的主人不是你！")
             return
-        else:
-            results['user_apply'] += DELIMITER_2 + bike_ID
-            sql = "update tb_user set user_apply = '" + results['user_apply'].strip(
-                DELIMITER_2) + "' where user_ID = '" + friend_ID + "'"
-            db_conn.cursor.execute(sql)
-            sql = "select * from tb_bike where bike_ID='" + bike_ID + "'"
-            results = db_conn.get_one(sql)
-            results['bike_users'] += DELIMITER_2 + friend_ID
-            sql = "update tb_bike set bike_users = '" + results['bike_users'].strip(
-                DELIMITER_2) + "' where bike_ID = '" + bike_ID + "'"
-            db_conn.cursor.execute(sql)
-            db_conn.commit()  # 提交数据
+
+        if not results_friend:  # 不存在这个用户
+            client_sock.send_data(DELIMITER.join([USER_RESULT_SHAREBIKE, '4']))
+            print("不存在这个用户")
+            return
+
+        if len(re.findall(user_ID + DELIMITER_2, results_friend['user_friend'], re.S)) == 0:
+            print('这个人不是你的好友哦！')
+            client_sock.send_data(DELIMITER.join([USER_RESULT_SHAREBIKE, '3']))
+            return
+
+        if len(re.findall(bike_ID + DELIMITER_2, results_friend['user_apply'], re.S)) != 0:
+            print('人家已经有这辆车了！')
+            client_sock.send_data(DELIMITER.join([USER_RESULT_SHAREBIKE, '2']))
+            return
+
+        results_friend['user_apply'] += bike_ID + DELIMITER_2
+        sql_fiend = "update tb_user set user_apply = '" + results_friend[
+            'user_apply'] + "' where user_ID = '" + friend_ID + "'"
+        db_conn.cursor.execute(sql_fiend)
+        results_bike['bike_users'] += friend_ID + DELIMITER_2
+        sql_bike = "update tb_bike set bike_users = '" + results_bike[
+            'bike_users'] + "' where bike_ID = '" + bike_ID + "'"
+        db_conn.cursor.execute(sql_bike)
+        db_conn.commit()  # 提交数据
+        client_sock.send_data(DELIMITER.join([USER_RESULT_SHAREBIKE, '1']))
         print('分享自行车骑行权限函数执行完毕')
+
+    def request_deleteFriend_handle(self, client_sock, user_ID, request_data):
+        '''删除好友'''
+
+        friend_ID = request_data['friend_ID']
+        db_conn = DB()
+        sql_me = "select * from tb_user where user_ID='" + user_ID + "'"
+        results_me = db_conn.get_one(sql_me)
+
+        if len(re.findall(friend_ID + DELIMITER_2, results_me['user_friend'], re.S)) == 0:
+            print('这个人不是你的好友哦！')
+            client_sock.send_data(DELIMITER.join([USER_RESULT_DELETEFRIEND, '2']))
+            return
+
+        # 正则表达式，将目标ID删掉
+        myfriends = re.sub(friend_ID + DELIMITER_2, DELIMITER_0, results_me['user_friend'], re.S)
+        sql_me = "update tb_user set user_friend = '" + myfriends + "' where user_ID = '" + user_ID + "'"
+        db_conn.cursor.execute(sql_me)
+        sql_him = "select * from tb_user where user_ID='" + friend_ID + "'"
+        results_him = db_conn.get_one(sql_him)
+        hisfriends = re.sub(user_ID + DELIMITER_2, DELIMITER_0, results_him['user_friend'], re.S)
+        sql_him = "update tb_user set user_friend = '" + hisfriends + "' where user_ID = '" + friend_ID + "'"
+        db_conn.cursor.execute(sql_him)
+        db_conn.commit()  # 提交数据
+        pass  # 还得删除车辆里的使用者
+
+    def request_shareBack_handle(self, client_sock, user_ID, request_data):
+        '''撤销好友的车辆使用权'''
+
+        bike_ID = request_data['bike_ID']
+        friend_ID = request_data['friend_ID']
+        db_conn = DB()
+        sql_friend = "select * from tb_user where user_ID='" + friend_ID + "'"
+        results_friend = db_conn.get_one(sql_friend)
+        sql_bike = "select * from tb_bike where bike_ID='" + bike_ID + "'"
+        results_bike = db_conn.get_one(sql_bike)
+
+        if results_bike['bike_host'] != user_ID:
+            client_sock.send_data(DELIMITER.join([USER_RESULT_SHAREBACK, '3']))
+            print("这辆车的主人不是你！")
+            return
+
+        if len(re.findall(bike_ID + DELIMITER_2, results_friend['user_apply'], re.S)) == 0:
+            print('人家没有这辆车了！')
+            client_sock.send_data(DELIMITER.join([USER_RESULT_SHAREBACK, '2']))
+            return
+
+        hisbikes = re.sub(bike_ID + DELIMITER_2, DELIMITER_0, results_friend['user_apply'], re.S)
+        sql_friend = "update tb_user set user_apply = '" + hisbikes + "' where user_ID = '" + friend_ID + "'"
+        db_conn.cursor.execute(sql_friend)
+        bike_users = re.sub(friend_ID + DELIMITER_2, DELIMITER_0, results_bike['bike_users'], re.S)
+        sql_bike = "update tb_bike set bike_users = '" + bike_users + "' where bike_ID = '" + bike_ID + "'"
+        db_conn.cursor.execute(sql_bike)
+        db_conn.commit()  # 提交数据
+        client_sock.send_data(DELIMITER.join([USER_RESULT_SHAREBACK, '1']))
+        print('撤销好友的车辆使用权函数执行完毕')
+
+    def request_replyFriend_handle(self, client_sock, user_ID, request_data):
+        '''用户对他人好友请求的回应的响应'''
+
+        friend_ID = request_data['friend_ID']
+        reply_num = request_data['reply_num']
+
+        # 不同意对方的好友请求
+        if reply_num == '2':
+            return
+
+        # 同意对方的好友请求
+        db_conn = DB()
+        sql_me = "select * from tb_user where user_ID='" + user_ID + "'"
+        results_me = db_conn.get_one(sql_me)
+        results_me['user_friend'] += friend_ID + DELIMITER_2
+        sql_me = "update tb_user set user_friend = '" + results_me[
+            'user_friend'] + "' where user_ID = '" + user_ID + "'"
+        db_conn.cursor.execute(sql_me)
+
+        sql_him = "select * from tb_user where user_ID='" + friend_ID + "'"
+        results_him = db_conn.get_one(sql_him)
+        results_him['user_friend'] += user_ID + DELIMITER_2
+        sql_him = "update tb_user set user_friend = '" + results_him[
+            'user_friend'] + "' where user_ID = '" + friend_ID + "'"
+        db_conn.cursor.execute(sql_him)
+        db_conn.commit()
+
+        print('用户对他人好友请求的回应的响应函数执行完毕')
 
     def request_openBike_handle(self, client_sock, user_ID, request_data):
         pass
