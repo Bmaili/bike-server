@@ -87,59 +87,59 @@ class Server(object):
             sock, addr = self.server_socket.accept()
             # 给客户端sock增加额外功能
             client_sock = SocketWrapper(sock)
+
             # 启动线程处理该用户请求
-            print("有个客户端接入... 详情：", addr)
-            user_ID = self.mylogin(client_sock, client_sock.recv_data())
-            if user_ID:
-                Thread(target=lambda: self.request_handle(client_sock, user_ID)).start()
+            Thread(target=lambda: self.mylogin(client_sock, addr)).start()
+
+    def mylogin(self, client_sock, addr):
+        # 解析请求数据
+        bool_login = False
+        print(addr, '接入服务器', 'hello')
+        request_data = client_sock.recv_data().split(DELIMITER)
+        if request_data[0] == USER_REQUEST_LOGIN and request_data[1] and request_data[2] and len(request_data) == 3:
+            user_ID = request_data[1]
+            user_password = request_data[2]
+            print(user_password)
+
+            # 用户名和密码验证
+            sql = "select * from tb_user where user_ID='" + user_ID + "'"
+            db_conn = DB()
+            results = db_conn.get_one(sql)
+
+            if results:
+                if results['user_password'] == user_password:
+                    print(user_ID + '登陆成功')
+                    client_sock.send_data(DELIMITER.join([USER_RESULT_LOGIN, '1']))
+                    Thread(target=lambda: self.request_handle(client_sock, user_ID)).start()
+                    bool_login = True
+                else:
+                    print("密码不对")
+                    client_sock.send_data(DELIMITER.join([USER_RESULT_LOGIN, '2']))
             else:
-                client_sock.close()
+                print("没这个用户")
+                client_sock.send_data(DELIMITER.join([USER_RESULT_LOGIN, '3']))
+        if not bool_login:
+            client_sock.close()
 
     def request_handle(self, client_sock, user_ID):
         """响应处理函数"""
-
-        while True:
-            # 读取客户端数据
-            request_text = client_sock.recv_data()
-            if not request_text:
-                print("客户端下线!")
-                break
-            # 解析请求数据
-            request_data = self.parse_request_text(request_text)
-            # 获取响应处理函数
-            handle_function = self.request_handle_functions[request_data["request_id"]]
-            if handle_function:
-                handle_function(client_sock, user_ID, request_data)
-        client_sock.close()
-
-    def mylogin(self, client_sock, request_text):
-        # 解析请求数据
-
-        request_data = request_text.split(DELIMITER)
-        if request_data[0] != USER_REQUEST_LOGIN or not request_data[1] or not request_data[2]:
-            return False
-        user_ID = request_data[1]
-        user_password = request_data[2]
-        print(user_password)
-
-        """用户名和密码验证"""
-        sql = "select * from tb_user where user_ID='" + user_ID + "'"
-        db_conn = DB()
-        results = db_conn.get_one(sql)
-
-        if not results:
-            client_sock.send_data(DELIMITER.join([USER_RESULT_LOGIN, '3']))
-            print("没这个用户")
-            return False
-
-        if results['user_password'] != user_password:
-            client_sock.send_data(DELIMITER.join([USER_RESULT_LOGIN, '2']))
-            print("密码不对")
-            return False
-
-        client_sock.send_data(DELIMITER.join([USER_RESULT_LOGIN, '1']))
-        print(user_ID + '登陆成功')
-        return user_ID
+        try:
+            while True:
+                # 读取客户端数据
+                request_text = client_sock.recv_data()
+                if not request_text:
+                    print("客户端下线!")
+                    break
+                # 解析请求数据
+                request_data = self.parse_request_text(request_text)
+                # 获取响应处理函数
+                handle_function = self.request_handle_functions[request_data["request_id"]]
+                if handle_function:
+                    handle_function(client_sock, user_ID, request_data)
+        except:
+            client_sock.send_data(REQUEST_ERROR)
+        finally:
+            client_sock.close()
 
     def request_Flush_handle(self, client_sock, user_ID, request_data):
         '''处理刷新请求'''
@@ -161,14 +161,14 @@ class Server(object):
         results_bike = db_conn.get_one(sql_bike)
 
         if not results_bike:
-            client_sock.send_data(DELIMITER.join([USER_RESULT_THEBIKE, '2']))
-            print("这车不存在")
+            client_sock.send_data(REQUEST_ERROR)
+            print("非法请求，这车不存在")
             return
 
         if results_bike['bike_host'] != user_ID and len(
                 re.findall(user_ID + DELIMITER_2, results_bike['bike_users'], re.S)) == 0:
             uesr_number = len(re.findall(DELIMITER_2, results_bike['bike_users'], re.S)) - 1
-            client_sock.send_data(DELIMITER.join([USER_RESULT_THEBIKE, '3',
+            client_sock.send_data(DELIMITER.join([USER_RESULT_THEBIKE, '2',
                                                   results_bike['bike_ID'],
                                                   results_bike['bike_nickname'],
                                                   results_bike['bike_host'],
@@ -259,7 +259,8 @@ class Server(object):
         results_bike = db_conn.get_one(sql_bike)
 
         if not results_friend or not results_bike:
-            print('没有这人或这车')
+            client_sock.send_data(REQUEST_ERROR)
+            print('非法请求')
             return
 
         if user_ID == friend_ID:
@@ -307,6 +308,11 @@ class Server(object):
         sql_me = "select * from tb_user where user_ID='" + user_ID + "'"
         results_me = db_conn.get_one(sql_me)
 
+        if not results_me:
+            client_sock.send_data(REQUEST_ERROR)
+            print('非法请求')
+            return
+
         if len(re.findall(friend_ID + DELIMITER_2, results_me['user_friend'], re.S)) == 0:
             print('这个人不是你的好友哦！')
             client_sock.send_data(DELIMITER.join([USER_RESULT_DELETEFRIEND, '2']))
@@ -336,8 +342,10 @@ class Server(object):
         results_bike = db_conn.get_one(sql_bike)
 
         if not results_bike or not results_friend:
-            print('没这人或这车')
+            client_sock.send_data(REQUEST_ERROR)
+            print('非法请求')
             return
+
         if results_bike['bike_host'] != user_ID:
             client_sock.send_data(DELIMITER.join([USER_RESULT_SHAREBACK, '3']))
             print("这辆车的主人不是你！")
@@ -386,57 +394,56 @@ class Server(object):
         db_conn.commit()
         print('用户对他人好友请求的回应的响应函数执行完毕')
 
+    def request_userRenamed_handle(self, client_sock, user_ID, request_data):
+        '''修改本人昵称'''
 
-def request_userRenamed_handle(self, client_sock, user_ID, request_data):
-    '''修改本人昵称'''
+        new_nickname = request_data['new_nickname']
 
-    new_nickname = request_data['new_nickname']
+        if len(re.findall(r'^[a-zA-Z0-9_\u4e00-\u9fa5]+$', new_nickname, re.S)) == 0:
+            client_sock.send_data(DELIMITER.join([USER_RESULT_USERRENAMED, '2']))
+            print('修改昵称失败！昵称只能有汉字、字母、下划线')
+            return
 
-    if len(re.findall(r'^[a-zA-Z0-9_\u4e00-\u9fa5]+$', new_nickname, re.S)) == 0:
-        client_sock.send_data(DELIMITER.join([USER_RESULT_USERRENAMED, '2']))
-        print('修改昵称失败！昵称只能有汉字、字母、下划线')
-        return
+        db_conn = DB()
+        sql = "update tb_user set user_nickname = '" + new_nickname + "' where user_ID = '" + user_ID + "'"
+        db_conn.cursor.execute(sql)
+        db_conn.commit()
+        client_sock.send_data(DELIMITER.join([USER_RESULT_USERRENAMED, '1']))
+        print('修改用户昵称函数执行完毕！')
 
-    db_conn = DB()
-    sql = "update tb_user set user_nickname = '" + new_nickname + "' where user_ID = '" + user_ID + "'"
-    db_conn.cursor.execute(sql)
-    db_conn.commit()
-    client_sock.send_data(DELIMITER.join([USER_RESULT_USERRENAMED, '1']))
-    print('修改用户昵称函数执行完毕！')
+    def request_bikeRenamed_handle(self, client_sock, user_ID, request_data):
+        '''修改车辆昵称'''
 
+        new_nickname = request_data['new_nickname']
+        bike_ID = request_data['bike_ID']
 
-def request_bikeRenamed_handle(self, client_sock, user_ID, request_data):
-    '''修改车辆昵称'''
+        if len(re.findall(r'^[a-zA-Z0-9_\u4e00-\u9fa5]+$', new_nickname, re.S)) == 0:
+            client_sock.send_data(DELIMITER.join([USER_RESULT_BIKERENAMED, '2']))
+            print('修改昵称失败！昵称只能有汉字、字母、下划线')
+            return
 
-    new_nickname = request_data['new_nickname']
-    bike_ID = request_data['bike_ID']
+        db_conn = DB()
+        sql_bike = "select * from tb_bike where bike_ID='" + bike_ID + "'"
+        results_bike = db_conn.get_one(sql_bike)
 
-    if len(re.findall(r'^[a-zA-Z0-9_\u4e00-\u9fa5]+$', new_nickname, re.S)) == 0:
-        client_sock.send_data(DELIMITER.join([USER_RESULT_BIKERENAMED, '2']))
-        print('修改昵称失败！昵称只能有汉字、字母、下划线')
-        return
+        if not results_bike:
+            client_sock.send_data(REQUEST_ERROR)
+            print("非法请求")
+            return
 
-    db_conn = DB()
-    sql_bike = "select * from tb_bike where bike_ID='" + bike_ID + "'"
-    results_bike = db_conn.get_one(sql_bike)
+        if user_ID != results_bike['bike_host']:
+            client_sock.send_data(DELIMITER.join([USER_RESULT_BIKERENAMED, '3']))
+            print('修改昵称失败！你不是该车主人')
+            return
 
-    if not results_bike:
-        return
+        sql_bike = "update tb_bike set bike_nickname = '" + new_nickname + "' where bike_ID = '" + bike_ID + "'"
+        db_conn.cursor.execute(sql_bike)
+        db_conn.commit()
+        client_sock.send_data(DELIMITER.join([USER_RESULT_BIKERENAMED, '1']))
+        print('修改车辆昵称函数执行完毕！')
 
-    if user_ID != results_bike['bike_host']:
-        client_sock.send_data(DELIMITER.join([USER_RESULT_BIKERENAMED, '3']))
-        print('修改昵称失败！你不是该车主人')
-        return
-
-    sql_bike = "update tb_bike set bike_nickname = '" + new_nickname + "' where bike_ID = '" + bike_ID + "'"
-    db_conn.cursor.execute(sql_bike)
-    db_conn.commit()
-    client_sock.send_data(DELIMITER.join([USER_RESULT_BIKERENAMED, '1']))
-    print('修改车辆昵称函数执行完毕！')
-
-
-def request_openBike_handle(self, client_sock, user_ID, request_data):
-    pass
+    def request_openBike_handle(self, client_sock, user_ID, request_data):
+        pass
 
 
 if __name__ == "__main__":

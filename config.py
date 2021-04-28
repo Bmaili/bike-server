@@ -34,7 +34,7 @@ USER_RESULT_BIKERENAMED = 'su011'  # 修改车辆昵称结果相应
 
 USER_MESSAGE_ADDFRIEND = '01'
 
-REQUEST_ERROR = 'xxx'
+REQUEST_ERROR = 'xxx'  #非法请求
 DELIMITER_0 = ''  # 正则表达式里用来删特定字符串
 DELIMITER = '|'  # 自定义协议数据分隔符
 DELIMITER_2 = ','  # 自定义协议数据分隔符2号
