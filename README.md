@@ -2,8 +2,8 @@
 大创校园共享自行车服务端
 
 ## 1. 成果设想图：
-![image](https://raw.githubusercontent.com/Bmaili/myimgbed/master/images/share_bike/1.png)
-![image](https://raw.githubusercontent.com/Bmaili/myimgbed/master/images/share_bike/2.png)
+![1.png](https://z3.ax1x.com/2021/04/28/gPyTKI.png)]
+![2.png](https://z3.ax1x.com/2021/04/28/gPyIxA.png)]
 
 ## 2. 说明：
 这是一个校园自行车共享、管理系统的大创项目的后端代码，我负责的是服务端的开发与数据协议的制定。果然是需求驱动学习，第一次接触后端、网络编程。
