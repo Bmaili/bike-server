@@ -29,6 +29,8 @@ class Server(object):
         self.register(USER_REQUEST_DELETEFRIEND, lambda sf, uID, data: self.request_deleteFriend_handle(sf, uID, data))
         self.register(USER_REQUEST_SHAREBACK, lambda sf, uID, data: self.request_shareBack_handle(sf, uID, data))
         self.register(USER_REQUEST_REPLYFRIEND, lambda sf, uID, data: self.request_replyFriend_handle(sf, uID, data))
+        self.register(USER_REQUEST_USERRENAMED, lambda sf, uID, data: self.request_userRenamed_handle(sf, uID, data))
+        self.register(USER_REQUEST_BIKERENAMED, lambda sf, uID, data: self.request_bikeRenamed_handle(sf, uID, data))
         self.register(USER_REQUEST_OPEN, lambda sf, uID, data: self.request_openBike_handle(sf, uID, data))
 
     def register(self, request_id, handle_function):
@@ -41,7 +43,6 @@ class Server(object):
         """解析请求数据"""
 
         request_text_list = request_text.split(DELIMITER)
-        print(request_text_list)
         # 保存请求数据
         request_data = dict()
 
@@ -65,10 +66,16 @@ class Server(object):
         elif request_text_list[0] == USER_REQUEST_REPLYFRIEND:  # 对他人好友请求的回应
             request_data['friend_ID'] = request_text_list[1]
             request_data['reply_num'] = request_text_list[2]
+        elif request_text_list[0] == USER_REQUEST_USERRENAMED:  # 修改本人昵称
+            request_data['new_nickname'] = request_text_list[1]
+        elif request_text_list[0] == USER_REQUEST_BIKERENAMED:  # 修改车辆昵称
+            request_data['bike_ID'] = request_text_list[1]
+            request_data['new_nickname'] = request_text_list[2]
         elif request_text_list[0] == USER_REQUEST_OPEN:  # 开锁请求
             request_data['bike_ID'] = request_text_list[1]
 
         print("解析数据函数执行完毕！")
+        print(request_data)
         return request_data
 
     def startup(self):
@@ -96,7 +103,6 @@ class Server(object):
             request_text = client_sock.recv_data()
             if not request_text:
                 print("客户端下线!")
-                # self.remove_offline_user(client_sock)
                 break
             # 解析请求数据
             request_data = self.parse_request_text(request_text)
@@ -159,14 +165,14 @@ class Server(object):
             print("这车不存在")
             return
 
-        if results_bike['bike_host'] != user_ID or len(
+        if results_bike['bike_host'] != user_ID and len(
                 re.findall(user_ID + DELIMITER_2, results_bike['bike_users'], re.S)) == 0:
             uesr_number = len(re.findall(DELIMITER_2, results_bike['bike_users'], re.S)) - 1
             client_sock.send_data(DELIMITER.join([USER_RESULT_THEBIKE, '3',
                                                   results_bike['bike_ID'],
                                                   results_bike['bike_nickname'],
                                                   results_bike['bike_host'],
-                                                  uesr_number]))
+                                                  str(uesr_number)]))
             print("你只能看部分数据！")
             return
 
@@ -178,7 +184,7 @@ class Server(object):
                                               results_bike['bike_users'],
                                               results_bike['bike_gps'],
                                               results_bike['bike_power']]))
-        print("查看某辆车具体信息函数执行完毕" + results_bike)
+        print("查看某辆车具体信息函数执行完毕")
 
     def request_TheFriend_handle(self, client_sock, user_ID, request_data):
         '''查看某个人的具体信息'''
@@ -216,6 +222,12 @@ class Server(object):
             print("不存在这个用户")
             return
 
+        if len(re.findall(USER_MESSAGE_ADDFRIEND + DELIMITER_3 + user_ID + DELIMITER_2, results['user_message'],
+                          re.S)) != 0:
+            client_sock.send_data(DELIMITER.join([USER_RESULT_ADDFRIEND, '5']))
+            print("你已经向他发送过好友请求了")
+            return
+
         sql = "select * from tb_user where user_ID='" + user_ID + "'"
         results = db_conn.get_one(sql)
 
@@ -245,6 +257,10 @@ class Server(object):
         results_friend = db_conn.get_one(sql_friend)
         sql_bike = "select * from tb_bike where bike_ID='" + bike_ID + "'"
         results_bike = db_conn.get_one(sql_bike)
+
+        if not results_friend or not results_bike:
+            print('没有这人或这车')
+            return
 
         if user_ID == friend_ID:
             client_sock.send_data(DELIMITER.join([USER_RESULT_SHAREBIKE, '6']))
@@ -319,6 +335,9 @@ class Server(object):
         sql_bike = "select * from tb_bike where bike_ID='" + bike_ID + "'"
         results_bike = db_conn.get_one(sql_bike)
 
+        if not results_bike or not results_friend:
+            print('没这人或这车')
+            return
         if results_bike['bike_host'] != user_ID:
             client_sock.send_data(DELIMITER.join([USER_RESULT_SHAREBACK, '3']))
             print("这辆车的主人不是你！")
@@ -346,7 +365,7 @@ class Server(object):
         reply_num = request_data['reply_num']
 
         # 不同意对方的好友请求
-        if reply_num == '2':
+        if reply_num == '2' or user_ID == friend_ID:
             return
 
         # 同意对方的好友请求
@@ -365,11 +384,59 @@ class Server(object):
             'user_friend'] + "' where user_ID = '" + friend_ID + "'"
         db_conn.cursor.execute(sql_him)
         db_conn.commit()
-
         print('用户对他人好友请求的回应的响应函数执行完毕')
 
-    def request_openBike_handle(self, client_sock, user_ID, request_data):
-        pass
+
+def request_userRenamed_handle(self, client_sock, user_ID, request_data):
+    '''修改本人昵称'''
+
+    new_nickname = request_data['new_nickname']
+
+    if len(re.findall(r'^[a-zA-Z0-9_\u4e00-\u9fa5]+$', new_nickname, re.S)) == 0:
+        client_sock.send_data(DELIMITER.join([USER_RESULT_USERRENAMED, '2']))
+        print('修改昵称失败！昵称只能有汉字、字母、下划线')
+        return
+
+    db_conn = DB()
+    sql = "update tb_user set user_nickname = '" + new_nickname + "' where user_ID = '" + user_ID + "'"
+    db_conn.cursor.execute(sql)
+    db_conn.commit()
+    client_sock.send_data(DELIMITER.join([USER_RESULT_USERRENAMED, '1']))
+    print('修改用户昵称函数执行完毕！')
+
+
+def request_bikeRenamed_handle(self, client_sock, user_ID, request_data):
+    '''修改车辆昵称'''
+
+    new_nickname = request_data['new_nickname']
+    bike_ID = request_data['bike_ID']
+
+    if len(re.findall(r'^[a-zA-Z0-9_\u4e00-\u9fa5]+$', new_nickname, re.S)) == 0:
+        client_sock.send_data(DELIMITER.join([USER_RESULT_BIKERENAMED, '2']))
+        print('修改昵称失败！昵称只能有汉字、字母、下划线')
+        return
+
+    db_conn = DB()
+    sql_bike = "select * from tb_bike where bike_ID='" + bike_ID + "'"
+    results_bike = db_conn.get_one(sql_bike)
+
+    if not results_bike:
+        return
+
+    if user_ID != results_bike['bike_host']:
+        client_sock.send_data(DELIMITER.join([USER_RESULT_BIKERENAMED, '3']))
+        print('修改昵称失败！你不是该车主人')
+        return
+
+    sql_bike = "update tb_bike set bike_nickname = '" + new_nickname + "' where bike_ID = '" + bike_ID + "'"
+    db_conn.cursor.execute(sql_bike)
+    db_conn.commit()
+    client_sock.send_data(DELIMITER.join([USER_RESULT_BIKERENAMED, '1']))
+    print('修改车辆昵称函数执行完毕！')
+
+
+def request_openBike_handle(self, client_sock, user_ID, request_data):
+    pass
 
 
 if __name__ == "__main__":
