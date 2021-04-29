@@ -8,7 +8,7 @@ class SocketWrapper(object):
     def recv_data(self):
         """接收数据"""
 
-        return self.sock.recv(512).decode("utf-8")
+        return self.sock.recv(512).decode("utf-8").strip()
 
     def send_data(self, messages):
         """发送数据"""
