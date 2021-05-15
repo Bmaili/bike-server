@@ -1,4 +1,4 @@
-# bike_server
+# bike-server
 大创校园共享自行车服务端
 
 ## 1. 成果设想图：
