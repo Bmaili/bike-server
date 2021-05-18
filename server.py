@@ -114,13 +114,13 @@ class Server(object):
             request_data['title'] = request_text_list[1]
             request_data['info'] = request_text_list[2]
         elif request_text_list[0] == USER_REQUEST_ONESELL:  # 查看一条卖车信息
-            request_data['num'] = request_text_list[1]
+            request_data['sell_ID'] = request_text_list[1]
         elif request_text_list[0] == USER_REQUEST_MYSELL:  # 查看我的转卖信息(大致的）
             pass
         elif request_text_list[0] == USER_REQUEST_DELSELL:  # 删除某条转卖信息
-            request_data['num'] = request_text_list[1]
+            request_data['sell_ID'] = request_text_list[1]
         elif request_text_list[0] == USER_REQUEST_STARSELL:  # 想买某辆转卖车辆
-            request_data['num'] = request_text_list[1]
+            request_data['sell_ID'] = request_text_list[1]
         elif request_text_list[0] == USER_REQUEST_CLOSEONLINE:  # 用户远程关锁
             request_data['bike_ID'] = request_text_list[1]
 
@@ -794,14 +794,14 @@ class Server(object):
     def request_oneSell_handle(self, client_sock, user_ID, request_data):
         '''查看转卖墙上的具体的某一条信息'''
 
-        num = request_data['num']
+        sell_ID = request_data['sell_ID']
         db_conn = DB()
-        results = db_conn.select_db(num)
+        results = db_conn.select_db(sell_ID)
         if not results:
             client_sock.send_data(REQUEST_ERROR)
             return
 
-        text = USER_RESULT_ONESELL + DELIMITER + num + DELIMITER + results['host_ID'] + DELIMITER + results[
+        text = USER_RESULT_ONESELL + DELIMITER + sell_ID + DELIMITER + results['host_ID'] + DELIMITER + results[
             'time'] + DELIMITER + results['title'] + DELIMITER + results['info']
         client_sock.send_data(text)
         print('查看转卖墙上的具体的某一条信息执行成功')
@@ -833,16 +833,16 @@ class Server(object):
     def request_delSell_handle(self, client_sock, user_ID, request_data):
         '''删除某条转卖信息'''
 
-        num = request_data['num']
+        sell_ID = request_data['sell_ID']
         db_conn = DB()
-        results = db_conn.select_db(num)
+        results = db_conn.select_db(sell_ID)
 
         # 不存在这信息或者你不是发布它的主人
         if not results or results['host_ID'] != user_ID:
             client_sock.send_data(DELIMITER.join([USER_RESULT_DELSELL, '2']))
             return
 
-        db_conn.delete_db(num)
+        db_conn.delete_db(sell_ID)
         db_conn.commit()
         client_sock.send_data(DELIMITER.join([USER_RESULT_DELSELL, '1']))
         print('成功把转卖信息删了！')
@@ -852,9 +852,9 @@ class Server(object):
     def request_starSell_handle(self, client_sock, user_ID, request_data):
         '''想买某辆转卖车辆'''
 
-        num = request_data['num']
+        sell_ID = request_data['sell_ID']
         db_conn = DB()
-        results = db_conn.select_db(num)
+        results = db_conn.select_db(sell_ID)
 
         if not results:
             client_sock.send_data(REQUEST_ERROR)
@@ -877,7 +877,7 @@ class Server(object):
                 break
 
         if not host_sock:
-            results_host['message'] += DELIMITER_3.join([USER_MESSAGE_RESELL, num, user_ID, time_now]) + DELIMITER_2
+            results_host['message'] += DELIMITER_3.join([USER_MESSAGE_RESELL, sell_ID, user_ID, time_now]) + DELIMITER_2
             print('对方不在线，留言成功！')
             client_sock.send_data(DELIMITER.join([USER_MESSAGE_RESELL, '1']))
             db_conn.update_db('message', results_host['message'], host_ID)
@@ -885,7 +885,7 @@ class Server(object):
             db_conn.close()
             return
 
-        message = DELIMITER.join([USER_MESSAGE_RESELL, num, user_ID, time_now])
+        message = DELIMITER.join([USER_MESSAGE_RESELL, sell_ID, user_ID, time_now])
         host_sock.send_data(message)
         print('对方在线，信息发送成功！')
 

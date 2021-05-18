@@ -52,7 +52,7 @@ class DB(object):
             return self.get_one(sql)
 
         else:  # 二手信息序号,序号是数字，故不用单引号
-            sql = "select * from tb_resell where num= {}".format(USERorBIKE_ID)
+            sql = "select * from tb_resell where sell_ID= {}".format(USERorBIKE_ID)
             return self.get_one(sql)
 
     def update_db(self, set, results, USERorBIKE_ID):
@@ -76,10 +76,10 @@ class DB(object):
                                                                                                   info)
         self.cursor.execute(sql)
 
-    def delete_db(self, num):
+    def delete_db(self, sell_ID):
         '''将二手出售信息从数据库删除'''
 
-        sql = "delete from tb_resell where num = {}".format(num)
+        sql = "delete from tb_resell where sell_ID = {}".format(sell_ID)
         self.cursor.execute(sql)
 
     def close(self):
